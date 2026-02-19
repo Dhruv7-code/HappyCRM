@@ -8,7 +8,7 @@ on:
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────────
-  # Backend — build + test
+  # Backend — build + test + coverage
   # ─────────────────────────────────────────────────────────────────────────────
   backend:
     name: Backend (ASP.NET Core)
@@ -18,10 +18,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET 8
+      - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "8.0.x"
+          dotnet-version: "10.0.x"
 
       - name: Restore dependencies
         run: dotnet restore InternalDashboard.slnx
@@ -29,13 +29,25 @@ jobs:
       - name: Build
         run: dotnet build InternalDashboard.slnx --no-restore --configuration Release
 
-      - name: Run NUnit tests
-        run: dotnet test InternalDashboard.slnx --no-build --configuration Release --verbosity normal
+      - name: Run NUnit tests with coverage
+        run: |
+          dotnet test InternalDashboard.slnx \
+            --no-build \
+            --configuration Release \
+            --verbosity normal \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./coverage
         env:
           ConnectionStrings__DefaultConnection: ${{ secrets.NEON_CONNECTION_STRING }}
 
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: ./coverage
+
   # ─────────────────────────────────────────────────────────────────────────────
-  # Frontend — install + build
+  # Frontend — install + lint + build
   # ─────────────────────────────────────────────────────────────────────────────
   frontend:
     name: Frontend (React + Vite)
@@ -58,6 +70,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Lint
+        run: npm run lint
 
       - name: Build
         run: npm run build
