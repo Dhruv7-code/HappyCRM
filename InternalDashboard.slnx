@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/InternalDashboard.API/InternalDashboard.API.csproj" />
+    <Project Path="src/InternalDashboard.Core/InternalDashboard.Core.csproj" />
+    <Project Path="src/InternalDashboard.Infrastructure/InternalDashboard.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/InternalDashboard.Tests/InternalDashboard.Tests.csproj" />
+  </Folder>
+</Solution>
