@@ -4,6 +4,7 @@ using InternalDashboard.Infrastructure.Data;
 using InternalDashboard.Infrastructure.Data.Seed;
 using InternalDashboard.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -24,18 +25,23 @@ if (string.IsNullOrWhiteSpace(connectionString))
         "ConnectionStrings:DefaultConnection is not set. " +
         "In production set the environment variable: ConnectionStrings__DefaultConnection");
 
-// ── Convert postgresql:// URL → Npgsql key-value format if needed ─────────────
-// Neon (and many PaaS providers) expose a postgres:// URI; Npgsql requires
-// key-value format (Host=...;Database=...;). Convert automatically so either
-// format works when pasted into Railway environment variables.
-if (connectionString.StartsWith("postgresql://") || connectionString.StartsWith("postgres://"))
+// ── Normalise the connection string ──────────────────────────────────────────
+// 1. Strip any invisible/whitespace characters that get injected when pasting
+//    into Railway's variable editor (BOM, newlines, zero-width spaces, etc.)
+connectionString = connectionString.Trim();
+
+// 2. Convert a postgres:// / postgresql:// URI to Npgsql key-value format.
+//    NpgsqlConnectionStringBuilder handles URL-encoded passwords, query params
+//    (?sslmode=require), and all edge cases correctly — far safer than manual
+//    string splitting.
+if (connectionString.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase) ||
+    connectionString.StartsWith("postgres://",   StringComparison.OrdinalIgnoreCase))
 {
-    var uri = new Uri(connectionString);
-    var userInfo = uri.UserInfo.Split(':');
-    var db = uri.AbsolutePath.TrimStart('/');
-    connectionString = $"Host={uri.Host};Port={uri.Port};Database={db};" +
-                       $"Username={userInfo[0]};Password={userInfo[1]};" +
-                       $"SSL Mode=Require;Trust Server Certificate=true";
+    var builder2 = new NpgsqlConnectionStringBuilder();
+    builder2.ConnectionString = connectionString;   // Npgsql parses URIs natively
+    builder2.SslMode          = SslMode.Require;
+    builder2.TrustServerCertificate = true;
+    connectionString = builder2.ConnectionString;
 }
 
 // ── Database ──────────────────────────────────────────────────────────────────
