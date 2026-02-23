@@ -15,8 +15,8 @@ RUN dotnet publish src/InternalDashboard.API/InternalDashboard.API.csproj -c Rel
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app
 
-COPY --from=build /app/out .
+COPY --from=build /app/out /app
 
 EXPOSE 8080
 
-ENTRYPOINT ["dotnet", "InternalDashboard.API.dll"]
+ENTRYPOINT ["dotnet", "/app/InternalDashboard.API.dll"]
