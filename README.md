@@ -1,110 +1,193 @@
-# Internal Dashboard
+# HappyCRM — Internal Integration Dashboard
 
-An internal organisation dashboard built with **ASP.NET Core (.NET 10)** on the backend and **React + Tailwind CSS** on the frontend, backed by **Neon PostgreSQL** via Entity Framework Core.
+> A production-grade internal dashboard for monitoring customer integrations, tracking job executions, and managing CRM data in real time.
+
+**Live Demo:** [https://happy-crm-gamma.vercel.app](https://happy-crm-gamma.vercel.app)  
+**Backend API:** [https://happycrm-production.up.railway.app](https://happycrm-production.up.railway.app)
 
 ---
 
-## Project structure
+## Table of Contents
+
+- [Overview](#overview)
+- [Tech Stack](#tech-stack)
+- [Architecture](#architecture)
+- [Workflow](#workflow)
+- [Project Structure](#project-structure)
+- [Getting Started (Local Dev)](#getting-started-local-dev)
+- [Deployment](#deployment)
+- [API Reference](#api-reference)
+- [Using the Live Project](#using-the-live-project)
+- [Future Roadmap](#future-roadmap)
+
+---
+
+## Overview
+
+HappyCRM is an internal operations dashboard designed to give teams full visibility over their customer integrations. It surfaces real-time execution metrics, job success/failure rates, and customer data — all in one place.
+
+Key capabilities:
+- 📊 **Dashboard** — live stats cards (total jobs, success rate, failures, pending)
+- 🔁 **Integration Jobs** — view all integration jobs, retry failed ones instantly
+- ⚡ **Executions** — paginated log of every job execution with status and timestamps
+- 👥 **Customers** — full CRUD: create, view, and edit customer records
+
+---
+
+## Tech Stack
+
+### Backend
+| Layer | Technology |
+|---|---|
+| Runtime | .NET 10 (ASP.NET Core Web API) |
+| ORM | Entity Framework Core 10 |
+| Database | Neon PostgreSQL (serverless) |
+| Architecture | Clean Architecture — API / Core / Infrastructure |
+| Testing | NUnit + NSubstitute |
+| Containerisation | Docker (multi-stage build) |
+| Hosting | Railway |
+
+### Frontend
+| Layer | Technology |
+|---|---|
+| Framework | React 19 + Vite 7 |
+| Styling | Tailwind CSS v4 |
+| HTTP | Fetch API (custom thin client) |
+| Hosting | Vercel |
+
+### DevOps
+| Tool | Purpose |
+|---|---|
+| GitHub Actions | CI — build + test on every push |
+| Docker | Reproducible backend builds |
+| Railway | Backend container hosting + env var management |
+| Vercel | Frontend CDN + automatic preview deployments |
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│                     Browser                         │
+│           React + Vite (Vercel CDN)                 │
+└──────────────────────┬──────────────────────────────┘
+                       │ HTTPS (CORS-controlled)
+┌──────────────────────▼──────────────────────────────┐
+│              ASP.NET Core Web API                   │
+│                  (Railway)                          │
+│  ┌────────────┐  ┌─────────────┐  ┌─────────────┐  │
+│  │ Controllers│  │  Services   │  │  Middleware  │  │
+│  └─────┬──────┘  └──────┬──────┘  └─────────────┘  │
+│        └────────────────┘                           │
+│              EF Core (Npgsql)                       │
+└──────────────────────┬──────────────────────────────┘
+                       │ SSL
+┌──────────────────────▼──────────────────────────────┐
+│           Neon PostgreSQL (serverless)              │
+└─────────────────────────────────────────────────────┘
+```
+
+The backend follows **Clean Architecture**:
+- **`InternalDashboard.API`** — controllers, middleware, DI wiring, `Program.cs`
+- **`InternalDashboard.Core`** — domain models, DTOs, service interfaces (zero dependencies)
+- **`InternalDashboard.Infrastructure`** — EF Core `AppDbContext`, migrations, service implementations, database seeder
+
+---
+
+## Workflow
+
+### How a request flows end to end
+
+1. **User opens the dashboard** at the Vercel URL
+2. **React** renders the UI and fires `fetch()` calls to the Railway backend via `VITE_API_URL`
+3. **ASP.NET Core** receives the request, validates CORS (only the Vercel origin is allowed), and routes it to the correct controller
+4. **The controller** calls a service interface (e.g. `IDashboardService`)
+5. **The service** queries Neon PostgreSQL via EF Core and returns typed DTOs
+6. **JSON** is serialised and returned to the frontend
+7. **React** updates the UI with live data
+
+### Job Retry Flow
+
+1. User clicks **Retry** on a failed job in the Integration Jobs page
+2. `POST /api/jobs/{id}/retry` is called
+3. The backend resets the job status to `Pending` and increments the retry counter
+4. The job reappears in the pending queue
+
+---
+
+## Project Structure
 
 ```
 /
-├── backend/                             # ASP.NET Core solution (deployed to Railway)
+├── backend/                                  # ASP.NET Core solution → Railway
+│   ├── Dockerfile                            # Multi-stage build (sdk:10.0 → aspnet:10.0)
+│   ├── railway.json                          # Railway deployment config
 │   ├── src/
-│   │   ├── InternalDashboard.API/       # Web API entry point
-│   │   ├── InternalDashboard.Core/      # Domain models, interfaces, DTOs
-│   │   └── InternalDashboard.Infrastructure/ # EF Core DbContext, migrations
-│   ├── tests/
-│   │   └── InternalDashboard.Tests/     # NUnit unit & integration tests
-│   └── InternalDashboard.slnx           # Solution file
-├── frontend/                            # React + Vite + Tailwind CSS (deployed to Vercel)
-└── .github/workflows/ci.yml             # GitHub Actions CI pipeline
+│   │   ├── InternalDashboard.API/            # Entry point — controllers, middleware, Program.cs
+│   │   ├── InternalDashboard.Core/           # Models, DTOs, service interfaces
+│   │   └── InternalDashboard.Infrastructure/ # EF Core, migrations, services, seeder
+│   └── tests/
+│       └── InternalDashboard.Tests/          # NUnit unit tests
+│
+├── frontend/                                 # React + Vite → Vercel
+│   ├── vercel.json                           # SPA rewrites + build config
+│   ├── vite.config.js                        # Dev proxy → localhost:5050 | prod build
+│   ├── .env.production                       # VITE_API_URL → Railway backend
+│   └── src/
+│       ├── api/                              # client.js, customersApi, jobsApi, statsApi
+│       ├── components/                       # Reusable UI components
+│       └── pages/                            # Dashboard, Customers, IntegrationJobs, Execution
+│
+└── .github/workflows/ci.yml                  # CI: build + test backend, build frontend
 ```
 
 ---
 
-## Prerequisites
+## Getting Started (Local Dev)
+
+### Prerequisites
 
 | Tool | Version |
-|------|---------|
+|---|---|
 | .NET SDK | 10.0+ |
 | Node.js | 20+ |
-| npm | 10+ |
-| `dotnet-ef` CLI | 10.0+ (`dotnet tool install -g dotnet-ef`) |
+| `dotnet-ef` CLI | `dotnet tool install -g dotnet-ef` |
 
----
+### 1. Clone
 
-## Getting started
+```bash
+git clone https://github.com/Dhruv7-code/HappyCRM.git
+cd HappyCRM
+```
 
-### Backend
-
-#### 1. Configure the database connection
-
-Use .NET User Secrets (never commit real credentials):
+### 2. Backend
 
 ```bash
 cd backend/src/InternalDashboard.API
 
+# Set your Neon connection string via user secrets (never commit credentials)
 dotnet user-secrets set "ConnectionStrings:DefaultConnection" \
-  "Host=<your-neon-host>;Port=5432;Database=<db>;Username=<user>;Password=<pw>;SSL Mode=Require;Trust Server Certificate=true"
+  "Host=<neon-host>;Database=<db>;Username=<user>;Password=<pw>;SSL Mode=Require;Trust Server Certificate=true"
+
+# Run — starts on http://localhost:5050
+dotnet run
 ```
 
-> You can find your Neon connection string in the **Neon Console → Project → Connection Details**.
-
-> **SSL note:** `Trust Server Certificate=true` is required locally because Neon's connection pooler
-> certificate may not match the hostname on your machine. In **production** (Railway) set
-> `Trust Server Certificate=false` — the Railway environment has a proper CA trust store.
-
-#### 2. Run database migrations
-
-```bash
-cd backend
-
-dotnet ef migrations add InitialCreate \
-  --project src/InternalDashboard.Infrastructure \
-  --startup-project src/InternalDashboard.API
-
-dotnet ef database update \
-  --project src/InternalDashboard.Infrastructure \
-  --startup-project src/InternalDashboard.API
-```
-
-#### 3. Start the API
-
-```bash
-cd backend
-dotnet run --project src/InternalDashboard.API
-# API available at http://localhost:5050
-# OpenAPI docs at http://localhost:5050/openapi/v1.json (Development only)
-```
-
-### Frontend
-
-#### 4. Configure and start
+### 3. Frontend
 
 ```bash
 cd frontend
-cp .env.example .env        # already contains VITE_API_URL=http://localhost:5050
+
+# .env is gitignored — create from example
+cp .env.example .env
+# VITE_API_URL=http://localhost:5050 is already set
+
 npm install
-npm run dev
-# App available at http://localhost:5173
+npm run dev   # starts on http://localhost:5173
 ```
 
-`VITE_API_URL` controls where the frontend sends API requests. Set it to your
-Railway backend URL when deploying to Vercel.
-
----
-
-## Running tests
-
-```bash
-cd backend
-dotnet test InternalDashboard.slnx --verbosity normal
-
-# With code coverage
-dotnet test InternalDashboard.slnx \
-  --collect:"XPlat Code Coverage" \
-  --results-directory ./coverage
-```
+The Vite dev server proxies `/api/*` → `http://localhost:5050` automatically — no CORS configuration needed locally.
 
 ---
 
@@ -112,55 +195,84 @@ dotnet test InternalDashboard.slnx \
 
 ### Backend → Railway
 
-Set these environment variables in the Railway service → **Variables** panel:
-
-| Variable | Value |
-|----------|-------|
-| `ConnectionStrings__DefaultConnection` | `Host=...;SSL Mode=Require;Trust Server Certificate=false` |
-| `AllowedCorsOrigins__0` | `https://<your-vercel-frontend-url>` |
+| Environment Variable | Value |
+|---|---|
+| `ConnectionStrings__DefaultConnection` | Neon connection string (key-value or `postgresql://` URI — both formats work) |
+| `AllowedCorsOrigins__0` | Your Vercel frontend URL (e.g. `https://happy-crm-gamma.vercel.app`) |
 | `ASPNETCORE_ENVIRONMENT` | `Production` |
 
-Railway **root directory** setting: `backend`
-Railway **start command**: `dotnet src/InternalDashboard.API/bin/Release/net10.0/InternalDashboard.API.dll`
+- Set **Root Directory** to `backend` in the Railway dashboard
+- Railway picks up `railway.json` and builds using the `Dockerfile` automatically
 
 ### Frontend → Vercel
 
-Set this environment variable in Vercel → **Settings → Environment Variables**:
-
-| Variable | Value |
-|----------|-------|
-| `VITE_API_URL` | `https://<your-railway-backend-url>` |
-
-Vercel **root directory** setting: `frontend`
+- Set **Root Directory** to `frontend` in the Vercel dashboard
+- No extra env vars needed — `VITE_API_URL` is committed in `frontend/.env.production`
+- Vercel handles SPA routing automatically via `vercel.json` rewrites
 
 ---
 
-## CI/CD (GitHub Actions)
+## API Reference
 
-The pipeline runs on every push and pull request to `main` / `develop`:
-
-| Job | Steps |
-|-----|-------|
-| **backend** | restore → build (Release) → NUnit tests + coverage |
-| **frontend** | npm ci → lint → Vite build |
-
-### Required GitHub Secrets
-
-| Secret | Description |
-|--------|-------------|
-| `NEON_CONNECTION_STRING` | Full Neon PostgreSQL connection string for CI tests |
-| `VITE_API_URL` | Production API base URL used during the frontend Vite build |
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/stats` | Aggregate stats (totals, success rate) |
+| `GET` | `/api/stats/jobs/success` | Count of successful jobs |
+| `GET` | `/api/stats/jobs/failed` | Count of failed jobs |
+| `GET` | `/api/stats/jobs/pending` | Count of pending jobs |
+| `GET` | `/api/stats/customers/total` | Total customer count |
+| `GET` | `/api/customers` | List all customers |
+| `POST` | `/api/customers/newcustomer` | Create a new customer |
+| `PUT` | `/api/customers/{id}/updateuser` | Update a customer |
+| `GET` | `/api/dashboard/jobs` | All integration jobs |
+| `GET` | `/api/dashboard/executions` | All job executions |
+| `GET` | `/api/dashboard/recent-executions` | Most recent executions |
+| `POST` | `/api/jobs/{id}/retry` | Retry a failed job |
 
 ---
 
-## Tech stack
+## Using the Live Project
 
-| Layer | Technology |
-|-------|-----------|
-| Backend | ASP.NET Core 10, EF Core 10, Npgsql |
-| Database | Neon PostgreSQL (serverless) |
-| Frontend | React 19, Vite 7, Tailwind CSS 4 |
-| Testing | NUnit 4, Coverlet |
-| CI | GitHub Actions |
-| Backend hosting | Railway |
-| Frontend hosting | Vercel |
+1. Open **[https://happy-crm-gamma.vercel.app](https://happy-crm-gamma.vercel.app)** in your browser — no login required
+2. Navigate using the **sidebar**:
+
+| Page | What you can do |
+|---|---|
+| **Dashboard** | See live KPIs — total jobs, success rate, failure count, recent activity |
+| **Integration Jobs** | Browse all jobs, filter by status, retry any failed job with one click |
+| **Executions** | Full paginated log of every execution with status and timestamps |
+| **Customers** | Browse all customers, add a new customer, or edit an existing record |
+
+3. All data is live from the production Neon database — changes persist immediately
+
+---
+
+## Future Roadmap
+
+### 🔐 Authentication & Role-Based Access
+Integrate ASP.NET Core Identity or a third-party provider (Auth0 / Entra ID) to protect the dashboard behind a login screen. Role definitions (Admin, Operator, Viewer) would gate who can trigger retries, create customers, or only view data.
+
+### 📋 Full Job Execution Log Viewer
+Each execution currently shows a summary status. A future version would expose a detailed scrollable log viewer — surfacing full stdout/stderr output line by line so operators can diagnose root causes without leaving the dashboard.
+
+### 🔔 Failure Alerts & Notifications
+Webhook or email notifications (via SendGrid or a Slack bot) triggered automatically when a job permanently fails or exceeds its retry threshold — so teams are alerted before users notice.
+
+### 📈 Historical Analytics & Trend Charts
+Time-series charts (Recharts or Chart.js) showing job success/failure trends over configurable time windows — giving operations teams a clear picture of system health over days and weeks.
+
+### 🌐 Multi-Tenant Support
+Namespace jobs and customers by organisation so the same dashboard instance can serve multiple teams with full data isolation, without spinning up separate deployments.
+
+---
+
+## CI Pipeline
+
+On every push to `master`, GitHub Actions:
+1. Restores and builds the backend solution (`dotnet build -c Release`)
+2. Runs all NUnit tests (`dotnet test`)
+3. Installs frontend dependencies and runs `npm run build`
+
+---
+
+*Built with .NET 10, React 19, and deployed on Railway + Vercel.*
