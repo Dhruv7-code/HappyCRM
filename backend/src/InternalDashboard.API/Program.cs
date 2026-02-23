@@ -25,17 +25,21 @@ if (string.IsNullOrWhiteSpace(connectionString))
         "In production set the environment variable: ConnectionStrings__DefaultConnection");
 
 // ── Normalise the connection string ──────────────────────────────────────────
-// 1. Strip any invisible/whitespace characters injected when pasting into
-//    Railway's variable editor (BOM, newlines, zero-width spaces, etc.)
+// Trim invisible chars (BOM, newlines, zero-width spaces) from Railway paste.
 connectionString = connectionString.Trim();
 
-// 2. Convert a postgres:// / postgresql:// URI → Npgsql key-value format.
-//    NpgsqlConnectionStringBuilder (v10) does NOT accept URIs via set_ConnectionString,
-//    so we parse manually using System.Uri which correctly URL-decodes passwords
-//    containing special characters (@, #, : etc.).
+// Convert postgres:// / postgresql:// URI → Npgsql key-value format.
+// Strip ALL query params (e.g. ?sslmode=require) before parsing — System.Uri
+// chokes on malformed query params like bare "?sslmode" with no value.
+// SSL is hardcoded below; it is always required for Neon.
 if (connectionString.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase) ||
     connectionString.StartsWith("postgres://",   StringComparison.OrdinalIgnoreCase))
 {
+    // Remove query string before handing to Uri parser
+    var queryIndex = connectionString.IndexOf('?');
+    if (queryIndex >= 0)
+        connectionString = connectionString[..queryIndex];
+
     var uri      = new Uri(connectionString);
     var userInfo = uri.UserInfo.Split(':', 2);          // limit 2 — password may contain ':'
     var username = Uri.UnescapeDataString(userInfo[0]);
