@@ -4,7 +4,6 @@ using InternalDashboard.Infrastructure.Data;
 using InternalDashboard.Infrastructure.Data.Seed;
 using InternalDashboard.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
-using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,22 +25,28 @@ if (string.IsNullOrWhiteSpace(connectionString))
         "In production set the environment variable: ConnectionStrings__DefaultConnection");
 
 // ── Normalise the connection string ──────────────────────────────────────────
-// 1. Strip any invisible/whitespace characters that get injected when pasting
-//    into Railway's variable editor (BOM, newlines, zero-width spaces, etc.)
+// 1. Strip any invisible/whitespace characters injected when pasting into
+//    Railway's variable editor (BOM, newlines, zero-width spaces, etc.)
 connectionString = connectionString.Trim();
 
-// 2. Convert a postgres:// / postgresql:// URI to Npgsql key-value format.
-//    NpgsqlConnectionStringBuilder handles URL-encoded passwords, query params
-//    (?sslmode=require), and all edge cases correctly — far safer than manual
-//    string splitting.
+// 2. Convert a postgres:// / postgresql:// URI → Npgsql key-value format.
+//    NpgsqlConnectionStringBuilder (v10) does NOT accept URIs via set_ConnectionString,
+//    so we parse manually using System.Uri which correctly URL-decodes passwords
+//    containing special characters (@, #, : etc.).
 if (connectionString.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase) ||
     connectionString.StartsWith("postgres://",   StringComparison.OrdinalIgnoreCase))
 {
-    var builder2 = new NpgsqlConnectionStringBuilder();
-    builder2.ConnectionString = connectionString;   // Npgsql parses URIs natively
-    builder2.SslMode          = SslMode.Require;
-    builder2.TrustServerCertificate = true;
-    connectionString = builder2.ConnectionString;
+    var uri      = new Uri(connectionString);
+    var userInfo = uri.UserInfo.Split(':', 2);          // limit 2 — password may contain ':'
+    var username = Uri.UnescapeDataString(userInfo[0]);
+    var password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : "";
+    var database = uri.AbsolutePath.TrimStart('/');
+    var port     = uri.Port > 0 ? uri.Port : 5432;
+
+    connectionString =
+        $"Host={uri.Host};Port={port};Database={database};" +
+        $"Username={username};Password={password};" +
+        $"SSL Mode=Require;Trust Server Certificate=true";
 }
 
 // ── Database ──────────────────────────────────────────────────────────────────
