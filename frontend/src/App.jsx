@@ -1,32 +1,35 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import Sidebar from './pages/Sidebar'
+import Dashboard from './pages/Dashboard'
+import Customers from './pages/Customers'
+import IntegrationJobs from './pages/IntegrationJobs'
+import Execution from './pages/Execution'
 
 function App() {
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col">
-      {/* Top navigation bar */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <span className="text-xl font-semibold text-gray-800">Internal Dashboard</span>
-          <span className="text-sm text-gray-400">v0.1.0</span>
-        </div>
-      </header>
+    <BrowserRouter>
+      <div className="flex h-screen w-screen overflow-hidden">
 
-      {/* Main content area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <div className="bg-white rounded-2xl shadow p-8 text-center text-gray-500">
-          <h1 className="text-2xl font-bold text-gray-700 mb-2">Welcome to the Internal Dashboard</h1>
-          <p className="text-sm">Setup is complete. Start building features here.</p>
-        </div>
-      </main>
+        {/* ── Left panel — 20% width, dark grey ── */}
+        <aside className="w-[20%] h-full bg-gray-800 shrink-0">
+          <Routes>
+            <Route path="/*" element={<Sidebar />} />
+          </Routes>
+        </aside>
 
-      {/* Footer */}
-      <footer className="py-4 text-center text-xs text-gray-400">
-        Internal use only &mdash; {new Date().getFullYear()}
-      </footer>
-    </div>
+        {/* ── Right panel — remaining 80%, white ── */}
+        <main className="flex-1 h-full bg-white overflow-y-auto">
+          <Routes>
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/customers" element={<Customers />} />
+            <Route path="/integration-jobs" element={<IntegrationJobs />} />
+            <Route path="/execution" element={<Execution />} />
+          </Routes>
+        </main>
+
+      </div>
+    </BrowserRouter>
   )
 }
 
