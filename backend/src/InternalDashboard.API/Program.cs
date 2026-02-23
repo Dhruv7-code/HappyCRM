@@ -24,6 +24,20 @@ if (string.IsNullOrWhiteSpace(connectionString))
         "ConnectionStrings:DefaultConnection is not set. " +
         "In production set the environment variable: ConnectionStrings__DefaultConnection");
 
+// ── Convert postgresql:// URL → Npgsql key-value format if needed ─────────────
+// Neon (and many PaaS providers) expose a postgres:// URI; Npgsql requires
+// key-value format (Host=...;Database=...;). Convert automatically so either
+// format works when pasted into Railway environment variables.
+if (connectionString.StartsWith("postgresql://") || connectionString.StartsWith("postgres://"))
+{
+    var uri = new Uri(connectionString);
+    var userInfo = uri.UserInfo.Split(':');
+    var db = uri.AbsolutePath.TrimStart('/');
+    connectionString = $"Host={uri.Host};Port={uri.Port};Database={db};" +
+                       $"Username={userInfo[0]};Password={userInfo[1]};" +
+                       $"SSL Mode=Require;Trust Server Certificate=true";
+}
+
 // ── Database ──────────────────────────────────────────────────────────────────
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString));
